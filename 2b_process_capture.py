@@ -96,20 +96,20 @@ def main(l1a_nc_path, lats_path=None, lons_path=None, coeff_type=None):
 
                 satobj.run_direct_georeferencing()
                 satobj.generate_l1b_cube(coeff_type=coeff_type)
-                satobj.generate_l1c_cube()
+                #satobj.generate_l1c_cube()
                 satobj.generate_l1d_cube(use_direct_georef=True)
 
         else:
             satobj.run_direct_georeferencing()
 
             satobj.generate_l1b_cube(coeff_type=coeff_type)
-            satobj.generate_l1c_cube()
+            #satobj.generate_l1c_cube()
             satobj.generate_l1d_cube(use_direct_georef=True)
 
         datacube = False
 
         write_l1b_nc_file(satobj, overwrite=True, datacube=datacube) 
-        write_l1c_nc_file(satobj, overwrite=True, datacube=datacube)
+        #write_l1c_nc_file(satobj, overwrite=True, datacube=datacube)
         write_l1d_nc_file(satobj, overwrite=True, datacube=datacube)
 
 
