@@ -1,15 +1,17 @@
+#!/usr/bin/env python
+
 from hypso import Hypso
 import csv
 import subprocess
 import os
 
 # Ensure the target directory exists
-base_dir = "/home/_shared/ARIEL/PLSR/captures"
+base_dir = "/home/_shared/ARIEL/HYPSO_DATA/"
 os.makedirs(base_dir, exist_ok=True)
 
 # Path to your CSV file
 script_dir = os.path.dirname(os.path.realpath(__file__))
-csv_file_path = os.path.join(script_dir, "captures.csv")
+csv_file_path = os.path.join(script_dir, "config", "captures.csv")
 
 # Read the CSV and download each file
 with open(csv_file_path, newline='') as csvfile:

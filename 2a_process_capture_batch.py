@@ -4,7 +4,7 @@ import os
 import subprocess
 
 # Path to the base directory
-base_dir = "/home/_shared/ARIEL/PLSR/captures"
+base_dir = "/home/_shared/ARIEL/HYPSO_DATA"
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 #script = os.path.join(script_dir, "2c_process_capture_6s.py")

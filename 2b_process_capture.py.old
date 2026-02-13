@@ -3,43 +3,17 @@
 import os
 import sys
 import numpy as np
+
+sys.path.insert(0, '/home/cameron/Projects/hypso-package/hypso')
+sys.path.insert(0, '/home/cameron/Projects/hypso-package/hypso1_calibration')
+sys.path.insert(0, '/home/cameron/Projects/hypso-package/hypso2_calibration')
+
 from pathlib import Path
-
-sys.path.insert(0, 'home/camerop/ARIEL/atmospheric_correction/hypso-package/hypso')
-sys.path.insert(0, 'home/camerop/ARIEL/atmospheric_correction/hypso-package/hypso1_calibration')
-sys.path.insert(0, 'home/camerop/ARIEL/atmospheric_correction/hypso-package/hypso2_calibration')
-
 from hypso import Hypso
-from hypso.write import write_l1b_nc_file, write_l1c_nc_file, write_l1d_nc_file, write_l2a_nc_file, write_products_nc_file
 
-TEST_DIR = "/home/cameron/Nedlastinger/image64N9E_2025-04-23T10-28-01Z"
+from hypso.write import write_l1b_nc_file, write_l1c_nc_file, write_l1d_nc_file, write_l2a_nc_file
 
-RAD_CAL_COEFFS = "moved"
-
-TOGGLE_OCSMART = False
-TOGGLE_ACOLITE = False
-TOGGLE_6SV1 = False
-TOGGLE_SREM = False
-TOGGLE_POLYMER = True
-
-TOGGLE_RUN_AC = True
-TOGGLE_READ_AC = True
-
-
-POLYMER_PATH = "/home/camerop/ARIEL/atmospheric_correction/polymer"
-EOREAD_PATH = "/home/camerop/ARIEL/atmospheric_correction/eoread"
-EOTOOLS_PATH = "/home/camerop/ARIEL/atmospheric_correction/eotools"
-
-OCSMART_PATH = ""
-ACOLITE_PATH = ""
-
-DEM_PATH = ""
-
-EARTHDATA_u = "cpenne"
-EARTHDATA_p = "Dec1!onJG0@1LogoMen5un!"
-
-
-def main(l1a_nc_path, lats_path=None, lons_path=None, coeff_type=None):
+def main(l1a_nc_path, lats_path=None, lons_path=None, coeff_type='moved'):
     # Check if the first file exists
     if not os.path.isfile(l1a_nc_path):
         print(f"Error: The file '{l1a_nc_path}' does not exist.")
@@ -80,13 +54,6 @@ def main(l1a_nc_path, lats_path=None, lons_path=None, coeff_type=None):
                 satobj.run_georeferencing(latitudes=lats, longitudes=lons)
 
                 satobj.generate_l1b_cube(coeff_type=coeff_type)
-                
-                if False:
-                    wls = np.around(np.array(satobj.spectral_coeffs),1)
-                    wls = wls.astype(int)
-                    print(wls)
-                    exit()
-
                 satobj.generate_l1c_cube()
                 satobj.generate_l1d_cube(use_direct_georef=False)
 
@@ -113,7 +80,21 @@ def main(l1a_nc_path, lats_path=None, lons_path=None, coeff_type=None):
         write_l1d_nc_file(satobj, overwrite=True, datacube=datacube)
 
 
+    EARTHDATA_u = "cpenne"
+    EARTHDATA_p = "Dec1!onJG0@1LogoMen5un!"
+
+
     # Atmospheric correction
+
+    TOGGLE_OCSMART = False
+    TOGGLE_ACOLITE = False
+    TOGGLE_6SV1 = False
+    TOGGLE_SREM = False
+    TOGGLE_POLYMER = False
+
+
+    TOGGLE_RUN_AC = False
+    TOGGLE_READ_AC = False
 
     if TOGGLE_OCSMART:
         satobj.ocsmart_dir = "/home/_shared/ARIEL/atmospheric_correction/OC-SMART/OC-SMART_with_HYPSO_9-29-25_release/"
@@ -143,16 +124,6 @@ def main(l1a_nc_path, lats_path=None, lons_path=None, coeff_type=None):
 
         write_l2a_nc_file(satobj, correction='6sv1', datacube=False, overwrite=True)
 
-    if TOGGLE_POLYMER:
-
-        if TOGGLE_RUN_AC:
-            satobj.ac_polymer_run_correction(polymer_path=POLYMER_PATH, eoread_path=EOREAD_PATH, eotools_path=EOTOOLS_PATH)
-        if TOGGLE_READ_AC:
-            datasets = satobj.ac_polymer_open_output()
-            #satobj.products['logchl'] = datasets['logchl']
-
-            write_l2a_nc_file(satobj=satobj, correction="polymer", overwrite=True, datacube=False)
-            write_products_nc_file(satobj, overwrite=True, file_name="polymer_chl.nc")
 
 
 
@@ -161,20 +132,14 @@ def main(l1a_nc_path, lats_path=None, lons_path=None, coeff_type=None):
 if __name__ == "__main__":
     if len(sys.argv) < 2 or len(sys.argv) > 2:
         print("Usage: python process_l1d_dir.py <nc_dir_path>")
-        
-        if TEST_DIR is not None:
-            print("Attempting to use test dir")
-            dir_path = TEST_DIR
-        else:
-            sys.exit(1)
-    else:
-        dir_path = sys.argv[1]
+        sys.exit(1)
+
+
+
+    dir_path = sys.argv[1]
 
     #dir_path = "/home/cameron/Nedlastinger/frohavet_2025-05-22T11-20-44Z"
     #dir_path = "/home/cameron/Nedlastinger/image63N9E_2025-05-11T10-04-27Z"
-    
-    #dir_path = "/home/cameron/Nedlastinger/image64N9E_2025-04-23T10-24-32Z"
-    #dir_path = "/home/cameron/Nedlastinger/image64N9E_2025-04-23T10-28-01Z"
 
     base_path = dir_path.rstrip('/')
 
@@ -192,7 +157,7 @@ if __name__ == "__main__":
     #lats_path = sys.argv[2] if len(sys.argv) == 4 else None
     #lons_path = sys.argv[3] if len(sys.argv) == 4 else None
 
-    main(l1a_nc_path, lats_path, lons_path, coeff_type=RAD_CAL_COEFFS)
+    main(l1a_nc_path, lats_path, lons_path, coeff_type='moved')
 
     #dst_dir = "/home/_shared/ARIEL/atmospheric_correction/OC-SMART/OC-SMART_with_HYPSO/L1B/"
     #dst_file = os.path.join(dst_dir, "HYPSO2_HSI_" + str(folder_name) + "-l1d.nc")
