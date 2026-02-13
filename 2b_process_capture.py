@@ -5,9 +5,9 @@ import sys
 import numpy as np
 from pathlib import Path
 
-sys.path.insert(0, 'home/camerop/ARIEL/atmospheric_correction/hypso-package/hypso')
-sys.path.insert(0, 'home/camerop/ARIEL/atmospheric_correction/hypso-package/hypso1_calibration')
-sys.path.insert(0, 'home/camerop/ARIEL/atmospheric_correction/hypso-package/hypso2_calibration')
+sys.path.insert(0, '/home/camerop/ARIEL/atmospheric_correction/hypso-package/hypso')
+sys.path.insert(0, '/home/camerop/ARIEL/atmospheric_correction/hypso-package/hypso1_calibration')
+sys.path.insert(0, '/home/camerop/ARIEL/atmospheric_correction/hypso-package/hypso2_calibration')
 
 from hypso import Hypso
 from hypso.write import write_l1b_nc_file, write_l1c_nc_file, write_l1d_nc_file, write_l2a_nc_file, write_products_nc_file
@@ -26,9 +26,9 @@ TOGGLE_RUN_AC = True
 TOGGLE_READ_AC = True
 
 
-POLYMER_PATH = "/home/camerop/ARIEL/atmospheric_correction/polymer"
-EOREAD_PATH = "/home/camerop/ARIEL/atmospheric_correction/eoread"
-EOTOOLS_PATH = "/home/camerop/ARIEL/atmospheric_correction/eotools"
+POLYMER_PATH = "/home/camerop/ARIEL/atmospheric_correction/Polymer/polymer/"
+EOREAD_PATH = "/home/camerop/ARIEL/atmospheric_correction/Polymer/eoread/"
+EOTOOLS_PATH = "/home/camerop/ARIEL/atmospheric_correction/Polymer/eotools/"
 
 OCSMART_PATH = ""
 ACOLITE_PATH = ""
