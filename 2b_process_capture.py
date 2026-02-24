@@ -5,16 +5,18 @@ import sys
 import numpy as np
 from pathlib import Path
 
-sys.path.insert(0, '/home/camerop/ARIEL/atmospheric_correction/hypso-package/hypso')
-sys.path.insert(0, '/home/camerop/ARIEL/atmospheric_correction/hypso-package/hypso1_calibration')
-sys.path.insert(0, '/home/camerop/ARIEL/atmospheric_correction/hypso-package/hypso2_calibration')
+sys.path.insert(0, '/home/camerop/AC/hypso-package/hypso')
+sys.path.insert(0, '/home/camerop/AC/hypso-package/hypso1_calibration')
+sys.path.insert(0, '/home/camerop/AC/hypso-package/hypso2_calibration')
 
 from hypso import Hypso
 from hypso.write import write_l1b_nc_file, write_l1c_nc_file, write_l1d_nc_file, write_l2a_nc_file, write_products_nc_file
 
 TEST_DIR = "/home/cameron/Nedlastinger/image64N9E_2025-04-23T10-28-01Z"
 
-RAD_CAL_COEFFS = "moved"
+RAD_CAL_COEFFS_OPTIONS = ["moved", "original", "adjusted"]
+
+TOGGLE_PROCESSING = True
 
 TOGGLE_OCSMART = False
 TOGGLE_ACOLITE = False
@@ -25,92 +27,110 @@ TOGGLE_POLYMER = True
 TOGGLE_RUN_AC = True
 TOGGLE_READ_AC = True
 
-
-POLYMER_PATH = "/home/camerop/ARIEL/atmospheric_correction/Polymer/polymer/"
-EOREAD_PATH = "/home/camerop/ARIEL/atmospheric_correction/Polymer/eoread/"
-EOTOOLS_PATH = "/home/camerop/ARIEL/atmospheric_correction/Polymer/eotools/"
+POLYMER_INPUT_PRODUCT_LEVEL = "l1c" 
+POLYMER_BASE_PATH = '/home/camerop/AC/Polymer_Oct_2025/'
+POLYMER_PATH = '/home/camerop/AC/Polymer_Oct_2025/polymer-master-v5'
+EOREAD_PATH = '/home/camerop/AC/Polymer_Oct_2025/eoread'
+EOTOOLS_PATH = '/home/camerop/AC/Polymer_Oct_2025/eotools'
+CORE_PATH = '/home/camerop/AC/Polymer_Oct_2025/core'
 
 OCSMART_PATH = ""
 ACOLITE_PATH = ""
 
 DEM_PATH = ""
 
+
+
 EARTHDATA_u = "cpenne"
 EARTHDATA_p = "Dec1!onJG0@1LogoMen5un!"
 
 
-def main(l1a_nc_path, lats_path=None, lons_path=None, coeff_type=None):
-    # Check if the first file exists
-    if not os.path.isfile(l1a_nc_path):
-        print(f"Error: The file '{l1a_nc_path}' does not exist.")
-        return
+def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=None):
 
-    # Process the first file
-    print(f"Processing file: {l1a_nc_path}")
+    if TOGGLE_PROCESSING:
+        # Check if the first file exists
+        if not os.path.isfile(l1a_nc_path):
+            print(f"Error: The file '{l1a_nc_path}' does not exist.")
+            return
 
-    nc_file = Path(l1a_nc_path)
+        # Process the first file
+        print(f"Processing file: {l1a_nc_path}")
 
-    satobj = Hypso(path=nc_file, verbose=True)
+        nc_file = Path(l1a_nc_path)
 
-    #print(satobj.nc_attrs['target_latitude'])
-    #print(satobj.nc_attrs['target_longitude'])
+        satobj = Hypso(path=nc_file, verbose=True, label=RAD_CAL_COEFFS)
 
-    if satobj.l1d_cube is None:
+        if satobj.l1d_cube is None:
 
-        # Run indirect georeferencing
-        if lats_path is not None and lons_path is not None:
-            try:
+            # Run indirect georeferencing
+            if lats_path is not None and lons_path is not None:
+                try:
 
-                with open(lats_path, mode='rb') as file:
-                    file_content = file.read()
-                
-                lats = np.frombuffer(file_content, dtype=np.float32)
+                    with open(lats_path, mode='rb') as file:
+                        file_content = file.read()
+                    
+                    lats = np.frombuffer(file_content, dtype=np.float32)
 
-                lats = lats.reshape(satobj.spatial_dimensions)
+                    lats = lats.reshape(satobj.spatial_dimensions)
 
-                with open(lons_path, mode='rb') as file:
-                    file_content = file.read()
-                
-                lons = np.frombuffer(file_content, dtype=np.float32)
-    
-                lons = lons.reshape(satobj.spatial_dimensions)
+                    with open(lons_path, mode='rb') as file:
+                        file_content = file.read()
+                    
+                    lons = np.frombuffer(file_content, dtype=np.float32)
+        
+                    lons = lons.reshape(satobj.spatial_dimensions)
 
 
-                # Directly provide the indirect lat/lons loaded from the file. This function will run the track geometry computations.
-                satobj.run_georeferencing(latitudes=lats, longitudes=lons)
+                    # Directly provide the indirect lat/lons loaded from the file. This function will run the track geometry computations.
+                    satobj.run_georeferencing(latitudes=lats, longitudes=lons)
 
-                satobj.generate_l1b_cube(coeff_type=coeff_type)
-                
-                if False:
-                    wls = np.around(np.array(satobj.spectral_coeffs),1)
-                    wls = wls.astype(int)
-                    print(wls)
-                    exit()
+                    satobj.generate_l1b_cube(coeff_type=coeff_type)
+                    
+                    if False:
+                        wls = np.around(np.array(satobj.spectral_coeffs),1)
+                        wls = wls.astype(int)
+                        print(wls)
+                        exit()
 
-                satobj.generate_l1c_cube()
-                satobj.generate_l1d_cube(use_direct_georef=False)
+                    satobj.generate_l1c_cube()
+                    satobj.generate_l1d_cube(use_direct_georef=False)
 
-            except Exception as ex:
-                print(ex)
-                print('Indirect georeferencing has failed. Defaulting to direct georeferencing.')
+                except Exception as ex:
+                    print(ex)
+                    print('Indirect georeferencing has failed. Defaulting to direct georeferencing.')
 
+                    satobj.run_direct_georeferencing()
+                    satobj.generate_l1b_cube(coeff_type=coeff_type)
+                    satobj.generate_l1c_cube()
+                    satobj.generate_l1d_cube(use_direct_georef=True)
+
+            else:
                 satobj.run_direct_georeferencing()
+
                 satobj.generate_l1b_cube(coeff_type=coeff_type)
-                #satobj.generate_l1c_cube()
+                satobj.generate_l1c_cube()
                 satobj.generate_l1d_cube(use_direct_georef=True)
 
-        else:
-            satobj.run_direct_georeferencing()
+            datacube = False
 
-            satobj.generate_l1b_cube(coeff_type=coeff_type)
-            #satobj.generate_l1c_cube()
-            satobj.generate_l1d_cube(use_direct_georef=True)
+            write_l1b_nc_file(satobj, overwrite=True, datacube=datacube) 
+            write_l1c_nc_file(satobj, overwrite=True, datacube=datacube)
+            write_l1d_nc_file(satobj, overwrite=True, datacube=datacube)
 
-        datacube = False
+    else:
 
-        write_l1b_nc_file(satobj, overwrite=True, datacube=datacube) 
-        #write_l1c_nc_file(satobj, overwrite=True, datacube=datacube)
-        write_l1d_nc_file(satobj, overwrite=True, datacube=datacube)
+        # Check if the first file exists
+        if not os.path.isfile(l1b_nc_path):
+            print(f"Error: The file '{l1b_nc_path}' does not exist.")
+            return
+
+        # Process the first file
+        print(f"Processing file: {l1b_nc_path}")
+
+        nc_file = Path(l1b_nc_path)
+
+        satobj = Hypso(path=nc_file, verbose=True, label=RAD_CAL_COEFFS)
+
 
 
     # Atmospheric correction
@@ -146,13 +166,29 @@ def main(l1a_nc_path, lats_path=None, lons_path=None, coeff_type=None):
     if TOGGLE_POLYMER:
 
         if TOGGLE_RUN_AC:
-            satobj.ac_polymer_run_correction(polymer_path=POLYMER_PATH, eoread_path=EOREAD_PATH, eotools_path=EOTOOLS_PATH)
+
+            #print(POLYMER_PATH)
+            #print(EOREAD_PATH)
+            #print(EOTOOLS_PATH)
+            #print(CORE_PATH)
+
+
+            datasets = satobj.ac_polymer_run_correction(polymer_base_path=POLYMER_BASE_PATH,
+                                                        polymer_path=POLYMER_PATH, 
+                                                        eoread_path=EOREAD_PATH,
+                                                        eotools_path=EOTOOLS_PATH,
+                                                        core_path=CORE_PATH,
+                                                        input_product_level=POLYMER_INPUT_PRODUCT_LEVEL)
+
+
+
         if TOGGLE_READ_AC:
-            datasets = satobj.ac_polymer_open_output()
+            datasets = satobj.ac_polymer_open_output(input_product_level=POLYMER_INPUT_PRODUCT_LEVEL)
+            
             #satobj.products['logchl'] = datasets['logchl']
 
             write_l2a_nc_file(satobj=satobj, correction="polymer", overwrite=True, datacube=False)
-            write_products_nc_file(satobj, overwrite=True, file_name="polymer_chl.nc")
+            #write_products_nc_file(satobj, overwrite=True, file_name="polymer_chl.nc")
 
 
 
@@ -170,33 +206,20 @@ if __name__ == "__main__":
     else:
         dir_path = sys.argv[1]
 
-    #dir_path = "/home/cameron/Nedlastinger/frohavet_2025-05-22T11-20-44Z"
-    #dir_path = "/home/cameron/Nedlastinger/image63N9E_2025-05-11T10-04-27Z"
-    
-    #dir_path = "/home/cameron/Nedlastinger/image64N9E_2025-04-23T10-24-32Z"
-    #dir_path = "/home/cameron/Nedlastinger/image64N9E_2025-04-23T10-28-01Z"
 
     base_path = dir_path.rstrip('/')
 
     folder_name = os.path.basename(base_path)
     l1a_nc_path = os.path.join(base_path, f"{folder_name}-l1a.nc")
+    l1b_nc_path = os.path.join(base_path, f"{folder_name}-l1b.nc")
+    l1c_nc_path = os.path.join(base_path, f"{folder_name}-l1c.nc")
     l1d_nc_path = os.path.join(base_path, f"{folder_name}-l1d.nc")
     lats_path = os.path.join(base_path, "processing-temp", "latitudes_indirectgeoref.dat")
     lons_path = os.path.join(base_path, "processing-temp", "longitudes_indirectgeoref.dat") 
 
 
-    #print(base_path)
-    #print(folder_name)
-    #print(lat_file)
-    #print(lon_file)
-    #lats_path = sys.argv[2] if len(sys.argv) == 4 else None
-    #lons_path = sys.argv[3] if len(sys.argv) == 4 else None
+    for RAD_CAL_COEFFS in RAD_CAL_COEFFS_OPTIONS:
 
-    main(l1a_nc_path, lats_path, lons_path, coeff_type=RAD_CAL_COEFFS)
+        main(l1a_nc_path, l1b_nc_path, lats_path, lons_path, coeff_type=RAD_CAL_COEFFS)
 
-    #dst_dir = "/home/_shared/ARIEL/atmospheric_correction/OC-SMART/OC-SMART_with_HYPSO/L1B/"
-    #dst_file = os.path.join(dst_dir, "HYPSO2_HSI_" + str(folder_name) + "-l1d.nc")
-
-    #import shutil
-    #shutil.copy2(l1d_nc_path, dst_file)
 

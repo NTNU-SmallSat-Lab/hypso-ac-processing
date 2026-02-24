@@ -6,7 +6,7 @@ import subprocess
 import os
 
 # Ensure the target directory exists
-base_dir = "/home/_shared/ARIEL/HYPSO_DATA/"
+base_dir = "/home/camerop/HYPSO_DATA/"
 os.makedirs(base_dir, exist_ok=True)
 
 # Path to your CSV file
