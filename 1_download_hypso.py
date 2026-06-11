@@ -6,12 +6,12 @@ import subprocess
 import os
 
 # Ensure the target directory exists
-base_dir = "/home/camerop/HYPSO_DATA/"
+base_dir = "/home/camerop/HYPSO_DATA_AOC/"
 os.makedirs(base_dir, exist_ok=True)
 
 # Path to your CSV file
 script_dir = os.path.dirname(os.path.realpath(__file__))
-csv_file_path = os.path.join(script_dir, "config", "captures.csv")
+csv_file_path = os.path.join(script_dir, "config", "captures_aeronet_oc_h2.csv")
 
 # Read the CSV and download each file
 with open(csv_file_path, newline='') as csvfile:

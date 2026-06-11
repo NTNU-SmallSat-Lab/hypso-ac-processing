@@ -3,7 +3,7 @@
 import os
 
 # Path to the base directory
-base_dir = "/home/camerop/HYPSO_DATA"
+base_dir = "/home/camerop/HYPSO_DATA_AOC"
 # Output file for commands
 output_file = "commands.sh"
 
