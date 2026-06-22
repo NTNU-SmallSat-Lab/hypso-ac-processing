@@ -35,23 +35,11 @@ from hypso.aeronet_oc import aeronet_oc_detect_matchups, \
                             format_capture_date, \
                             process_hypso, \
                             match_hypso_data, \
-                            get_column_prods, \
-                            process_satellite, \
-                            match_data, \
-                            match_all_data
+                            get_column_prods
 
 from hypso.write import write_aeronet_oc_matchup_nc_file
 
-import earthaccess
-
-#TEST_DIR = "/home/camerop/HYPSO_DATA_AERONET_TEST/aeronetvenice_2025-03-04T10-38-05Z/"
-#TEST_DIR = "/home/camerop/HYPSO_DATA_AERONET_TEST/zeebrugge_2025-09-01T11-27-47Z"
-#TEST_DIR = "/home/camerop/HYPSO_DATA_AOC/annapolis_2026-03-10T16-03-45Z"
-TEST_DIR = "/home/camerop/HYPSO_DATA_AOC_TEST/annapolis_2026-03-10T16-03-45Z"
-HYPSO_DATA_DIR = "/home/camerop/HYPSO_DATA_AOC_TEST"
-#HYPSO_DATA_DIR = "/home/camerop/HYPSO_DATA_AOC"
-#HYPSO_DATA_DIR = "/home/camerop/HYPSO_DATA_OCSMART"
-#HYPSO_DATA_DIR = "/home/camerop/HYPSO_DATA_AERONET_TEST"
+TEST_DIR = "/home/camerop/HYPSO_DATA_AOC/aeronetvenice_2025-03-04T10-38-05Z/"
 
 GENERATE_FIGURES = False
 WRITE_DATACUBE = False
@@ -59,24 +47,22 @@ WRITE_DATACUBE = False
 #RAD_CAL_COEFFS_OPTIONS = ["moved", "original", "adjusted"]
 RAD_CAL_COEFFS_OPTIONS = ["moved"]
 
-TOGGLE_PROCESSING = False
-APPLY_MASKS = False
+TOGGLE_PROCESSING = True
+APPLY_MASKS = True
 
 AERONET_OC_PRECHECK = True
 
 TOGGLE_OCSMART = False
-TOGGLE_ACOLITE = True
+TOGGLE_ACOLITE = False
 TOGGLE_6SV1 = False
 TOGGLE_SREM = False
-TOGGLE_POLYMER = False
+TOGGLE_POLYMER = True
 
 TOGGLE_RUN_AC = True
 TOGGLE_READ_AC = True
 
 TOGGLE_AERONET_OC_MATCHUPS = False
-
-MATCHUP_ATMOSPHERIC_CORRECTION = "polymer"
-MATCHUP_ATMOSPHERIC_CORRECTION = "acolite"
+TOGGLE_AERONET_OC_MATCHUPS_2 = False
 
 POLYMER_INPUT_PRODUCT_LEVEL = "l1c" 
 POLYMER_BASE_PATH = '/home/camerop/AC/Polymer_HYPSO_SRF_Oct_2025/'
@@ -93,7 +79,7 @@ DEM_PATH = ""
 AERONET_OC_DATA_DIR = "/home/camerop/AC/AERONET_OC_Data"
 AERONET_OC_SITES_CSV_PATH = "/home/camerop/AC/hypso-ac-processing/config/AERONET_OC_Sites.csv"
 
-
+HYPSO_DATA_DIR = "/home/camerop/HYPSO_DATA_AOC"
 
 EARTHDATA_u = "cpenne"
 EARTHDATA_p = "Dec1!onJG0@1LogoMen5un!"
@@ -142,16 +128,6 @@ def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=No
 
     print(Panel(f"Running processing for {Path(l1a_nc_path).name}.", title="HYPSO Processing", expand=False))
     print(f"Processing started at {datetime.now()}")
-
-    try:
-        auth = earthaccess.login(persist=True)
-        earthaccess_login = True
-        print("NASA Earthaccess login successful!")
-    except earthaccess.LoginAttemptFailure:
-        print("NASA Earthaccess login failed!")
-        earthaccess_login = False 
-
-
     if TOGGLE_PROCESSING:
         # Check if the first file exists
         if not os.path.isfile(l1a_nc_path):
@@ -272,24 +248,18 @@ def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=No
  
     # Check for AERONET-OC data before proceeding to Atmospheric Correction
     if AERONET_OC_PRECHECK:
-
-        satobj_precheck = Hypso(path=nc_file, verbose=True, load_cube = False)
-
-        aoc_query = build_aeronet_queries(satobj_precheck)
-
-        del satobj_precheck
+        aoc_query = build_aeronet_queries(satobj)
 
         try:
             aoc_cb = process_aeronet(**aoc_query[0])
         except Exception as ex:
             print(ex)
-            print(f"No AERONET-OC data are available for this capture for queried date and time.")
+            print(f"No AERONET-OC data are available for this capture at this date and time: {satobj.capture_datetime}")
             print("Submitted AERONET-OC query:")
             print(aoc_query)
             print(f"The processing of capture {processing_capture_name} will now end.")
             gc.collect()
             sys.exit(0)
-
 
 
     # Atmospheric correction
@@ -349,35 +319,97 @@ def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=No
             write_l2a_nc_file(satobj=satobj, correction="polymer", overwrite=True, datacube=False)
             write_products_nc_file(satobj, overwrite=True, file_name="polymer_chl.nc")
 
-    gc.collect()
-
-
-
-
-
-
-
     if TOGGLE_AERONET_OC_MATCHUPS:
 
         print("[INFO] Entering AERONET-OC matchups code")
 
 
+        from hypso.aeronet_oc import aeronet_oc_detect_matchups, \
+                                    aeronet_oc_generate_matchup, \
+                                    aeronet_oc_matchup_load_hypso_data
+        
+        from hypso.write import write_aeronet_oc_matchup_nc_file
 
-        all_hypso_pace_dfs = []
-        all_hypso_dfs = []
-        all_pace_dfs = []
+        satobj = Hypso(path=l1b_nc_path, load_cube = False, verbose=True)
+        
+        atmospheric_correction = "polymer"
 
+        capture_dir = satobj.capture_dir
+
+        l2a_name = satobj.l2a_name(label=RAD_CAL_COEFFS, 
+                                   atmospheric_correction=atmospheric_correction)
+        print(l2a_name)
+
+
+        l2a_nc_path = Path(capture_dir, l2a_name)
+        
+        del satobj
+
+        print(l2a_nc_path)
+
+        if not os.path.isfile(l2a_nc_path):
+            print(f"Error: The file '{l2a_nc_path}' does not exist.")
+            return None
+
+        # Process the first file
+        print(f"Processing file for AERONET-OC: {l2a_nc_path}")
+
+        try:
+            satobj = Hypso(path=l2a_nc_path, verbose=True)
+
+
+            matchups = aeronet_oc_detect_matchups(satobj, 
+                                                AERONET_OC_SITES_CSV_PATH, 
+                                                atmospheric_correction=atmospheric_correction)
+
+            print(f"[INFO] Detected {len(matchups)} potential matchups.")
+            print("[INFO] Combining matchups with HYPSO data.")
+            for matchup_number, matchup in enumerate(matchups):
+
+                matchup_aeronet_data = aeronet_oc_generate_matchup(satobj,
+                                                    matchup,
+                                                    AERONET_OC_DATA_DIR,
+                                                    )
+
+                if matchup_aeronet_data is None:
+                    print(f"[INFO] Skipping matchup {matchup_number+1}")
+                    continue
+
+                print("[INFO] AERONET-OC matchup for L2a file")
+                matchup_hypso_data = aeronet_oc_matchup_load_hypso_data(satobj, matchup, atmospheric_correction=atmospheric_correction, n_size=5)
+                matchup_data = matchup_hypso_data | matchup_aeronet_data
+                write_aeronet_oc_matchup_nc_file(satobj, matchup_data, atmospheric_correction=atmospheric_correction, datacube=True, matchup_number=matchup_number)
+
+                print("[INFO] AERONET-OC matchup for L1d file")
+                satobj = Hypso(path=l1d_nc_path, verbose=True)
+                matchup_hypso_data = aeronet_oc_matchup_load_hypso_data(satobj, matchup, atmospheric_correction=atmospheric_correction, n_size=5)
+                matchup_data = matchup_hypso_data | matchup_aeronet_data
+                write_aeronet_oc_matchup_nc_file(satobj, matchup_data, atmospheric_correction=atmospheric_correction, datacube=True, matchup_number=matchup_number)
+
+                print("[INFO] AERONET-OC matchup for L1c file")
+                satobj = Hypso(path=l1c_nc_path, verbose=True)
+                matchup_hypso_data = aeronet_oc_matchup_load_hypso_data(satobj, matchup, atmospheric_correction=atmospheric_correction, n_size=5)
+                matchup_data = matchup_hypso_data | matchup_aeronet_data
+                write_aeronet_oc_matchup_nc_file(satobj, matchup_data, atmospheric_correction=atmospheric_correction, datacube=True, matchup_number=matchup_number)
+
+        except Exception as ex:
+            print("[ERROR] Matchup failed!")
+            print(ex)
+
+
+    gc.collect()
+
+    if TOGGLE_AERONET_OC_MATCHUPS_2:
+
+        print("[INFO] Entering AERONET-OC matchups code")
+
+
+
+
+        all_dfs = []
         matchups_df = None
-        hypso_matchups_df = None
-        pace_matchups_df = None
 
-
-        matching_files = find_matching_files(HYPSO_DATA_DIR, coeff_type="moved", product_level="l2a", atmospheric_correction=MATCHUP_ATMOSPHERIC_CORRECTION)
-
-        #matching_files = ["/home/camerop/HYPSO_DATA_AOC/annapolis_2026-04-11T15-46-47Z/annapolis_2026-04-11T15-46-47Z-moved-l2a-polymer.nc",
-        #"/home/camerop/HYPSO_DATA_AOC/aeronetvenice_2025-05-14T10-45-06Z/aeronetvenice_2025-05-14T10-45-06Z-moved-l2a-polymer.nc"]
-
-        #matching_files = ["/home/camerop/HYPSO_DATA_AOC/annapolis_2025-05-17T15-51-35Z/annapolis_2025-05-17T15-51-35Z-moved-l2a-polymer.nc"]
+        matching_files = find_matching_files(HYPSO_DATA_DIR, coeff_type="moved", product_level="l2a", atmospheric_correction="polymer")
 
         for matching_file in matching_files:
         
@@ -409,87 +441,60 @@ def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=No
                     aoc_lat = aoc_cb["aoc_latitude"][0]
                     aoc_lon = aoc_cb["aoc_longitude"][0]
 
-
-
-
-                    # HYPSO Matchups
-
-                    hypso_cb = process_hypso(satobj, aoc_lat, aoc_lon, atmospheric_correction=MATCHUP_ATMOSPHERIC_CORRECTION)
-
-
-                    # PACE Matchups
-
-
                     # Pull out unique days
                     unique_days = aoc_cb["aoc_datetime"].dt.date.unique()
                     unique_days_str = [day.strftime('%Y-%m-%d') for day in unique_days]
-                    search_date = satobj.capture_datetime.strftime('%Y-%m-%d')
-
-                    pace_cb = process_satellite(start_date=search_date, end_date=search_date,
-                                    latitude=aoc_lat, longitude=aoc_lon, sat="PACE",
-                                    selected_dates=unique_days_str,
-                                    local_path=Path(satobj.capture_dir))
 
 
-                    hypso_pace_matchups = match_all_data(aoc_cb, hypso_cb, df_pace=pace_cb,
-                            cv_max_hypso=0.4, cv_max_pace=0.15, senz_max=70.0,
-                            min_percent_valid=50.0, max_time_diff=180, std_max=1.5)
+                    #print(aoc_lat)
+                    #print(aoc_lon)
+                    #print(unique_days)
+                    #print(unique_days_str)
 
 
-                    #hypso_matchups = match_hypso_data(hypso_cb, aoc_cb, cv_max=0.60, senz_max=60.0, 
-                    #    min_percent_valid=55.0, max_time_diff=180, std_max=3)
+                    hypso_cb = process_hypso(satobj, aoc_lat, aoc_lon, atmospheric_correction="polymer")
+                    #sat_cb = process_satellite(start_date="2024-06-01", end_date="2024-07-31",
+                    #                latitude=aoc_lat, longitude=aoc_lon, sat="PACE",
+                    #                selected_dates=unique_days_str)
 
-                    #pace_matchups = match_data(pace_cb, aoc_cb, cv_max=0.15, senz_max=60.0,
-                    #    min_percent_valid=55.0, max_time_diff=180, std_max=1.5)
+                    matchups = match_hypso_data(hypso_cb, aoc_cb, cv_max=0.60, senz_max=60.0, 
+                        min_percent_valid=55.0, max_time_diff=180, std_max=3)
 
-                    all_hypso_pace_dfs.append(hypso_pace_matchups)
-                    #all_hypso_dfs.append(hypso_matchups)
-                    #all_pace_dfs.append(pace_matchups)
-
-                    #try:
-                    #    hypso_pace_matchups_df = pd.concat(all_hypso_pace_dfs, ignore_index=True)
-                    #    print(hypso_pace_matchups_df.head())
-                    #except ValueError:
-                    #    print("No rows in dataframe!")
-
-                    '''
-                    dict_aoc = get_column_prods(hypso_matchups_df, "aoc")
-                    waves_aoc = np.array(dict_aoc["rrs"]["wavelengths"])
-                    rrs_aoc = hypso_matchups_df[dict_aoc["rrs"]["columns"]].to_numpy()
-
-                    dict_hypso = get_column_prods(hypso_matchups_df, "hypso")
-                    waves_hypso = np.array(dict_hypso["rrs"]["wavelengths"])
-                    rrs_hypso = hypso_matchups_df[dict_hypso["rrs"]["columns"]].to_numpy()
-                    '''
+                    all_dfs.append(matchups)
 
                     try:
-                        hypso_pace_matchups_df = pd.concat(all_hypso_pace_dfs, ignore_index=True)
-                        print(hypso_pace_matchups_df)
+                        matchups_df = pd.concat(all_dfs, ignore_index=True)
+                        print(matchups_df.head())
                     except ValueError:
                         print("No rows in dataframe!")
 
-                    if hypso_pace_matchups_df is not None:
-                        hypso_pace_matchups_df.to_csv(f"aeronet_matchups_{MATCHUP_ATMOSPHERIC_CORRECTION}_tmp.csv", index=False)
-                        hypso_pace_matchups_df.to_parquet(f"aeronet_matchups_{MATCHUP_ATMOSPHERIC_CORRECTION}_tmp.parquet", index=False)
+
+                    dict_aoc = get_column_prods(matchups, "aoc")
+                    waves_aoc = np.array(dict_aoc["rrs"]["wavelengths"])
+                    rrs_aoc = matchups[dict_aoc["rrs"]["columns"]].to_numpy()
+
+                    dict_hypso = get_column_prods(matchups, "hypso")
+                    waves_hypso = np.array(dict_hypso["rrs"]["wavelengths"])
+                    rrs_hypso = matchups[dict_hypso["rrs"]["columns"]].to_numpy()
+
+
 
 
             except Exception as ex:
-                print("Exception occured")
                 print(ex)
 
 
         try:
-            hypso_pace_matchups_df = pd.concat(all_hypso_pace_dfs, ignore_index=True)
-            print(hypso_pace_matchups_df)
+            matchups_df = pd.concat(all_dfs, ignore_index=True)
+            print(matchups_df)
         except ValueError:
             print("No rows in dataframe!")
 
-        if hypso_pace_matchups_df is not None:
-            hypso_pace_matchups_df.to_csv(f"aeronet_matchups_{MATCHUP_ATMOSPHERIC_CORRECTION}.csv", index=False)
-            hypso_pace_matchups_df.to_parquet(f"aeronet_matchups_{MATCHUP_ATMOSPHERIC_CORRECTION}.parquet", index=False)
+        if matchups_df is not None:
+            matchups_df.to_parquet('aeronet.parquet', index=False)
         
         
-    print(f"Processing has completed sucessfully for capture {processing_capture_name}!")
+        print(f"Processing has completed sucessfully for capture {processing_capture_name}!")
 
             
 
