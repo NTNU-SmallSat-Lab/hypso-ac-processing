@@ -10,6 +10,7 @@ import gc
 from rich import print
 from rich.panel import Panel
 from datetime import datetime
+import matplotlib.pyplot as plt
 
 sys.path.insert(0, '/home/camerop/AC/hypso-package/hypso')
 sys.path.insert(0, '/home/camerop/AC/hypso-package/hypso1_calibration')
@@ -19,7 +20,8 @@ sys.path.insert(0, '/home/camerop/AC/hypso-package/hypso2_calibration')
 #sys.path.insert(0, '/home/cameron/Projects/hypso-package/hypso1_calibration')
 #sys.path.insert(0, '/home/cameron/Projects/hypso-package/hypso2_calibration')
 
-
+import logging
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
 from hypso import Hypso
 from hypso.write import write_l1b_nc_file, write_l1c_nc_file, write_l1d_nc_file, write_l2a_nc_file, write_products_nc_file
@@ -48,10 +50,14 @@ import earthaccess
 #TEST_DIR = "/home/camerop/HYPSO_DATA_AERONET_TEST/zeebrugge_2025-09-01T11-27-47Z"
 #TEST_DIR = "/home/camerop/HYPSO_DATA_AOC/annapolis_2026-03-10T16-03-45Z"
 TEST_DIR = "/home/camerop/HYPSO_DATA_AOC_TEST/annapolis_2026-03-10T16-03-45Z"
-HYPSO_DATA_DIR = "/home/camerop/HYPSO_DATA_AOC_TEST"
+TEST_DIR = "/home/camerop/HYPSO_DATA_AOC/aeronetvenice_2025-06-22T10-46-15Z"
+TEST_DIR = "/home/camerop/HYPSO_DATA_AOC/frohavet_2025-02-25T11-26-39Z"
+HYPSO_DATA_DIR = "/home/camerop/HYPSO_DATA_AOC"
 #HYPSO_DATA_DIR = "/home/camerop/HYPSO_DATA_AOC"
 #HYPSO_DATA_DIR = "/home/camerop/HYPSO_DATA_OCSMART"
 #HYPSO_DATA_DIR = "/home/camerop/HYPSO_DATA_AERONET_TEST"
+
+OUTPUT_BASE_DIR = Path("/home/camerop/Output/")
 
 GENERATE_FIGURES = False
 WRITE_DATACUBE = False
@@ -59,24 +65,23 @@ WRITE_DATACUBE = False
 #RAD_CAL_COEFFS_OPTIONS = ["moved", "original", "adjusted"]
 RAD_CAL_COEFFS_OPTIONS = ["moved"]
 
+LABEL = "moved_unmasked"
+
 TOGGLE_PROCESSING = False
 APPLY_MASKS = False
 
-AERONET_OC_PRECHECK = True
+AERONET_OC_PRECHECK = False
 
 TOGGLE_OCSMART = False
-TOGGLE_ACOLITE = True
+TOGGLE_ACOLITE = False
 TOGGLE_6SV1 = False
 TOGGLE_SREM = False
 TOGGLE_POLYMER = False
+TOGGLE_DARK_PIXEL_SUBTRACTION = True
 
-TOGGLE_RUN_AC = True
-TOGGLE_READ_AC = True
+TOGGLE_RUN_AC = False
+TOGGLE_READ_AC = False
 
-TOGGLE_AERONET_OC_MATCHUPS = False
-
-MATCHUP_ATMOSPHERIC_CORRECTION = "polymer"
-MATCHUP_ATMOSPHERIC_CORRECTION = "acolite"
 
 POLYMER_INPUT_PRODUCT_LEVEL = "l1c" 
 POLYMER_BASE_PATH = '/home/camerop/AC/Polymer_HYPSO_SRF_Oct_2025/'
@@ -90,80 +95,47 @@ ACOLITE_PATH = "/home/camerop/AC/ACOLITE/acolite"
 
 DEM_PATH = ""
 
-AERONET_OC_DATA_DIR = "/home/camerop/AC/AERONET_OC_Data"
-AERONET_OC_SITES_CSV_PATH = "/home/camerop/AC/hypso-ac-processing/config/AERONET_OC_Sites.csv"
-
-
-
 EARTHDATA_u = "cpenne"
 EARTHDATA_p = "Dec1!onJG0@1LogoMen5un!"
 
 
 
-def find_matching_files(aeronet_oc_data_dir, coeff_type="moved", product_level="l2a", atmospheric_correction="polymer"):
-    """
-    Loop through directories in AERONET_OC_DATA_DIR, and find the matching
-    netCDF file that starts with the directory name.
-    
-    Args:
-        aeronet_oc_data_dir: Path to the AERONET_OC_DATA_DIR
-    
-    Returns:
-        List of full paths to matching files
-    """
-    matching_files = []
-    
-    # Loop through all items in the main directory
-    for item in os.listdir(aeronet_oc_data_dir):
-        dir_path = os.path.join(aeronet_oc_data_dir, item)
-        
-        # Check if it's a directory
-        if os.path.isdir(dir_path):
-            # Pattern for the file: dirname + "-moved-l2a-polymer.nc"
-            # The dirname format example: "aeronetvenice_2025-05-14T10-45-06Z"
-            pattern = os.path.join(dir_path, f"{item}*-{coeff_type}-{product_level}-{atmospheric_correction}.nc")
-            
-            # Search for matching files
-            matching_files_list = glob.glob(pattern)
-            
-            if matching_files_list:
-                # Add all matches to the list
-                matching_files.extend(matching_files_list)
-                for match in matching_files_list:
-                    print(f"Found file: {match}")
-            else:
-                print(f"No matching file found for directory '{item}'")
-    
-    return matching_files
+
 
 
 
 def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=None):
 
-    print(Panel(f"Running processing for {Path(l1a_nc_path).name}.", title="HYPSO Processing", expand=False))
-    print(f"Processing started at {datetime.now()}")
+    logging.info(Panel(f"Running processing for {Path(l1a_nc_path).name}.", title="HYPSO Processing", expand=False))
+    logging.info(f"Processing started at {datetime.now()}")
 
     try:
         auth = earthaccess.login(persist=True)
         earthaccess_login = True
-        print("NASA Earthaccess login successful!")
+        logging.info("NASA Earthaccess login successful!")
     except earthaccess.LoginAttemptFailure:
-        print("NASA Earthaccess login failed!")
+        logging.warning("NASA Earthaccess login failed!")
         earthaccess_login = False 
 
+
+    if not APPLY_MASKS:
+        processing_label = RAD_CAL_COEFFS + "_unmasked"
+    else:
+        processing_label = RAD_CAL_COEFFS
 
     if TOGGLE_PROCESSING:
         # Check if the first file exists
         if not os.path.isfile(l1a_nc_path):
-            print(f"Error: The file '{l1a_nc_path}' does not exist.")
+            logging.error(f"The file '{l1a_nc_path}' does not exist.")
             return
 
         # Process the first file
-        print(f"Processing file: {l1a_nc_path}")
+        logging.info(f"Processing file: {l1a_nc_path}")
 
         nc_file = Path(l1a_nc_path)
 
-        satobj = Hypso(path=nc_file, verbose=True, label=RAD_CAL_COEFFS)
+
+        satobj = Hypso(path=nc_file, verbose=True, label=processing_label)
 
         if satobj.l1d_cube is None:
 
@@ -201,8 +173,8 @@ def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=No
                     satobj.generate_l1d_cube(use_direct_georef=False, generate_figures=GENERATE_FIGURES)
 
                 except Exception as ex:
-                    print(ex)
-                    print('Indirect georeferencing has failed. Defaulting to direct georeferencing.')
+                    logging.warning(ex)
+                    logging.warning('Indirect georeferencing has failed. Defaulting to direct georeferencing.')
 
                     satobj.run_direct_georeferencing()
                     satobj.generate_l1b_cube(coeff_type=coeff_type)
@@ -235,7 +207,8 @@ def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=No
                     masked=True
                     
                 except Exception as ex:
-                    print(ex)
+                    logging.warning("Masking failed! No mask will be applied to the capture.")
+                    logging.warning(ex)
                     masked=False
             else:
                 masked=False
@@ -257,15 +230,15 @@ def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=No
 
         # Check if the first file exists
         if not os.path.isfile(l1d_nc_path):
-            print(f"Error: The file '{l1d_nc_path}' does not exist.")
+            logging.error(f"The file '{l1d_nc_path}' does not exist.")
             return
 
         # Process the first file
-        print(f"Processing file: {l1d_nc_path}")
+        logging.info(f"Processing file: {l1d_nc_path}")
 
         nc_file = Path(l1d_nc_path)
 
-        satobj = Hypso(path=nc_file, verbose=True, label=RAD_CAL_COEFFS)
+        satobj = Hypso(path=nc_file, verbose=True, label=processing_label)
 
 
     processing_capture_name = satobj.capture_name
@@ -282,11 +255,11 @@ def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=No
         try:
             aoc_cb = process_aeronet(**aoc_query[0])
         except Exception as ex:
-            print(ex)
-            print(f"No AERONET-OC data are available for this capture for queried date and time.")
-            print("Submitted AERONET-OC query:")
+            logging.warning(ex)
+            logging.warning(f"No AERONET-OC data are available for this capture for queried date and time.")
+            logging.warning("Submitted AERONET-OC query:")
             print(aoc_query)
-            print(f"The processing of capture {processing_capture_name} will now end.")
+            logging.warning(f"The processing of capture {processing_capture_name} will now end.")
             gc.collect()
             sys.exit(0)
 
@@ -297,6 +270,9 @@ def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=No
     if TOGGLE_OCSMART:
         satobj.ocsmart_dir = OCSMART_PATH
         if TOGGLE_RUN_AC:
+
+            logging.info("Running OC-SMART atmospheric correction")
+
             satobj.ac_ocsmart_stage_input()
             satobj.ac_ocsmart_run_correction()
         if TOGGLE_READ_AC:
@@ -306,6 +282,9 @@ def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=No
     if TOGGLE_ACOLITE:
         satobj.acolite_dir = ACOLITE_PATH
         if TOGGLE_RUN_AC:
+
+            logging.info("Running ACOLITE atmospheric correction")
+
             satobj.ac_acolite_run_correction(input_product_level='L1D', EARTHDATA_u=EARTHDATA_u, EARTHDATA_p=EARTHDATA_p)
         if TOGGLE_READ_AC:
             satobj.ac_acolite_open_output()
@@ -313,6 +292,9 @@ def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=No
             write_l2a_nc_file(satobj=satobj, correction="acolite_l2w", overwrite=True, datacube=False)
 
     if TOGGLE_6SV1:
+
+        logging.info("Running 6SV1 atmospheric correction")
+
         from hypso.ac import run_6sv1_atmospheric_correction
         dem_path = Path("/home/cameron/Nedlastinger/GMTED2km.tif")
 
@@ -320,17 +302,22 @@ def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=No
 
         satobj.l2_cube['6sv1'] = cube
 
+
+        logging.info("Writing POLYMER atmospheric correction output file")
+        logging.info("L2a file will be written to capture directory")
         write_l2a_nc_file(satobj, correction='6sv1', datacube=False, overwrite=True)
 
     if TOGGLE_POLYMER:
 
         if TOGGLE_RUN_AC:
+            
+            logging.info("Running POLYMER atmospheric correction")
 
-            #print(POLYMER_PATH)
-            #print(EOREAD_PATH)
-            #print(EOTOOLS_PATH)
-            #print(CORE_PATH)
-
+            logging.info("POLYMER configuration:")
+            logging.info(f"POLYMER_PATH: {POLYMER_PATH}")
+            logging.info(f"EOREAD_PATH: {EOREAD_PATH}")
+            logging.info(f"EOTOOLS_PATH {EOTOOLS_PATH}")
+            logging.info(f"CORE_PATH: {CORE_PATH}")
 
             datasets = satobj.ac_polymer_run_correction(polymer_base_path=POLYMER_BASE_PATH,
                                                         polymer_path=POLYMER_PATH, 
@@ -339,9 +326,13 @@ def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=No
                                                         core_path=CORE_PATH,
                                                         input_product_level=POLYMER_INPUT_PRODUCT_LEVEL)
 
-
+            logging.info("POLYMER atmospheric correction finished")
 
         if TOGGLE_READ_AC:
+
+            logging.info("Reading POLYMER atmospheric correction output file")
+            logging.info("L2a and product files will be written to capture directory")
+
             datasets = satobj.ac_polymer_open_output(input_product_level=POLYMER_INPUT_PRODUCT_LEVEL)
             
             satobj.products['chla'] = datasets['chla']
@@ -349,147 +340,21 @@ def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=No
             write_l2a_nc_file(satobj=satobj, correction="polymer", overwrite=True, datacube=False)
             write_products_nc_file(satobj, overwrite=True, file_name="polymer_chl.nc")
 
+    if TOGGLE_DARK_PIXEL_SUBTRACTION:
+        
+        logging.info("Running Dark Pixel Subtraction (DPS) atmospheric correction")
+        logging.info("L2a file will be written to capture directory")
+
+        dark_pixel = satobj.ac_dark_pixel_subtraction()
+        plt.plot(satobj.wavelengths, dark_pixel)
+        plt.savefig(Path(satobj.capture_dir, "dark_pixel.png"))
+        plt.close()
+        write_l2a_nc_file(satobj, correction='dps', datacube=False, overwrite=True)
+
+
     gc.collect()
 
-
-
-
-
-
-
-    if TOGGLE_AERONET_OC_MATCHUPS:
-
-        print("[INFO] Entering AERONET-OC matchups code")
-
-
-
-        all_hypso_pace_dfs = []
-        all_hypso_dfs = []
-        all_pace_dfs = []
-
-        matchups_df = None
-        hypso_matchups_df = None
-        pace_matchups_df = None
-
-
-        matching_files = find_matching_files(HYPSO_DATA_DIR, coeff_type="moved", product_level="l2a", atmospheric_correction=MATCHUP_ATMOSPHERIC_CORRECTION)
-
-        #matching_files = ["/home/camerop/HYPSO_DATA_AOC/annapolis_2026-04-11T15-46-47Z/annapolis_2026-04-11T15-46-47Z-moved-l2a-polymer.nc",
-        #"/home/camerop/HYPSO_DATA_AOC/aeronetvenice_2025-05-14T10-45-06Z/aeronetvenice_2025-05-14T10-45-06Z-moved-l2a-polymer.nc"]
-
-        #matching_files = ["/home/camerop/HYPSO_DATA_AOC/annapolis_2025-05-17T15-51-35Z/annapolis_2025-05-17T15-51-35Z-moved-l2a-polymer.nc"]
-
-        for matching_file in matching_files:
-        
-            print(matching_file)
-
-            if not os.path.isfile(matching_file):
-                print(f"Error: The file '{matching_file}' does not exist.")
-                continue
-
-
-            try:
-            
-                satobj = Hypso(path=matching_file, verbose=True)
-
-                aoc_queries = build_aeronet_queries(satobj)
-                
-
-                for aoc_query in aoc_queries:
-
-                    #aoc_cb = process_aeronet(aoc_site="Casablanca_Platform", 
-                    #                start_date="2024-06-01", end_date="2024-07-31",
-                    #                data_level=15)
-
-                    aoc_cb = process_aeronet(**aoc_query)
-                    #print(aoc_cb.head())      
-
-
-                    # Pull out coordinates 
-                    aoc_lat = aoc_cb["aoc_latitude"][0]
-                    aoc_lon = aoc_cb["aoc_longitude"][0]
-
-
-
-
-                    # HYPSO Matchups
-
-                    hypso_cb = process_hypso(satobj, aoc_lat, aoc_lon, atmospheric_correction=MATCHUP_ATMOSPHERIC_CORRECTION)
-
-
-                    # PACE Matchups
-
-
-                    # Pull out unique days
-                    unique_days = aoc_cb["aoc_datetime"].dt.date.unique()
-                    unique_days_str = [day.strftime('%Y-%m-%d') for day in unique_days]
-                    search_date = satobj.capture_datetime.strftime('%Y-%m-%d')
-
-                    pace_cb = process_satellite(start_date=search_date, end_date=search_date,
-                                    latitude=aoc_lat, longitude=aoc_lon, sat="PACE",
-                                    selected_dates=unique_days_str,
-                                    local_path=Path(satobj.capture_dir))
-
-
-                    hypso_pace_matchups = match_all_data(aoc_cb, hypso_cb, df_pace=pace_cb,
-                            cv_max_hypso=0.4, cv_max_pace=0.15, senz_max=70.0,
-                            min_percent_valid=50.0, max_time_diff=180, std_max=1.5)
-
-
-                    #hypso_matchups = match_hypso_data(hypso_cb, aoc_cb, cv_max=0.60, senz_max=60.0, 
-                    #    min_percent_valid=55.0, max_time_diff=180, std_max=3)
-
-                    #pace_matchups = match_data(pace_cb, aoc_cb, cv_max=0.15, senz_max=60.0,
-                    #    min_percent_valid=55.0, max_time_diff=180, std_max=1.5)
-
-                    all_hypso_pace_dfs.append(hypso_pace_matchups)
-                    #all_hypso_dfs.append(hypso_matchups)
-                    #all_pace_dfs.append(pace_matchups)
-
-                    #try:
-                    #    hypso_pace_matchups_df = pd.concat(all_hypso_pace_dfs, ignore_index=True)
-                    #    print(hypso_pace_matchups_df.head())
-                    #except ValueError:
-                    #    print("No rows in dataframe!")
-
-                    '''
-                    dict_aoc = get_column_prods(hypso_matchups_df, "aoc")
-                    waves_aoc = np.array(dict_aoc["rrs"]["wavelengths"])
-                    rrs_aoc = hypso_matchups_df[dict_aoc["rrs"]["columns"]].to_numpy()
-
-                    dict_hypso = get_column_prods(hypso_matchups_df, "hypso")
-                    waves_hypso = np.array(dict_hypso["rrs"]["wavelengths"])
-                    rrs_hypso = hypso_matchups_df[dict_hypso["rrs"]["columns"]].to_numpy()
-                    '''
-
-                    try:
-                        hypso_pace_matchups_df = pd.concat(all_hypso_pace_dfs, ignore_index=True)
-                        print(hypso_pace_matchups_df)
-                    except ValueError:
-                        print("No rows in dataframe!")
-
-                    if hypso_pace_matchups_df is not None:
-                        hypso_pace_matchups_df.to_csv(f"aeronet_matchups_{MATCHUP_ATMOSPHERIC_CORRECTION}_tmp.csv", index=False)
-                        hypso_pace_matchups_df.to_parquet(f"aeronet_matchups_{MATCHUP_ATMOSPHERIC_CORRECTION}_tmp.parquet", index=False)
-
-
-            except Exception as ex:
-                print("Exception occured")
-                print(ex)
-
-
-        try:
-            hypso_pace_matchups_df = pd.concat(all_hypso_pace_dfs, ignore_index=True)
-            print(hypso_pace_matchups_df)
-        except ValueError:
-            print("No rows in dataframe!")
-
-        if hypso_pace_matchups_df is not None:
-            hypso_pace_matchups_df.to_csv(f"aeronet_matchups_{MATCHUP_ATMOSPHERIC_CORRECTION}.csv", index=False)
-            hypso_pace_matchups_df.to_parquet(f"aeronet_matchups_{MATCHUP_ATMOSPHERIC_CORRECTION}.parquet", index=False)
-        
-        
-    print(f"Processing has completed sucessfully for capture {processing_capture_name}!")
+    logging.info(f"Processing has completed sucessfully for capture {processing_capture_name}!")
 
             
 
@@ -512,7 +377,7 @@ if __name__ == "__main__":
         print("Usage: python process_l1d_dir.py <nc_dir_path>")
         
         if TEST_DIR is not None:
-            print("Attempting to use test dir")
+            logging.info("Attempting to use test dir")
             dir_path = TEST_DIR
         else:
             gc.collect()
@@ -527,9 +392,9 @@ if __name__ == "__main__":
 
         folder_name = os.path.basename(base_path)
         l1a_nc_path = os.path.join(base_path, f"{folder_name}-l1a.nc")
-        l1b_nc_path = os.path.join(base_path, f"{folder_name}-{RAD_CAL_COEFFS}-l1b.nc")
-        l1c_nc_path = os.path.join(base_path, f"{folder_name}-{RAD_CAL_COEFFS}-l1c.nc")
-        l1d_nc_path = os.path.join(base_path, f"{folder_name}-{RAD_CAL_COEFFS}-l1d.nc")
+        l1b_nc_path = os.path.join(base_path, f"{folder_name}-{LABEL}-l1b.nc")
+        l1c_nc_path = os.path.join(base_path, f"{folder_name}-{LABEL}-l1c.nc")
+        l1d_nc_path = os.path.join(base_path, f"{folder_name}-{LABEL}-l1d.nc")
         lats_path = os.path.join(base_path, "processing-temp", "latitudes_indirectgeoref.dat")
         lons_path = os.path.join(base_path, "processing-temp", "longitudes_indirectgeoref.dat")
 
