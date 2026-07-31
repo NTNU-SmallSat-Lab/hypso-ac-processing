@@ -52,7 +52,7 @@ import earthaccess
 TEST_DIR = "/home/camerop/HYPSO_DATA_AOC_TEST/annapolis_2026-03-10T16-03-45Z"
 TEST_DIR = "/home/camerop/HYPSO_DATA_AOC/aeronetvenice_2025-06-22T10-46-15Z"
 TEST_DIR = "/home/camerop/HYPSO_DATA_AOC/frohavet_2025-02-25T11-26-39Z"
-HYPSO_DATA_DIR = "/home/camerop/HYPSO_DATA_AOC"
+HYPSO_DATA_DIR = "/home/camerop/HYPSO_DATA_SNR"
 #HYPSO_DATA_DIR = "/home/camerop/HYPSO_DATA_AOC"
 #HYPSO_DATA_DIR = "/home/camerop/HYPSO_DATA_OCSMART"
 #HYPSO_DATA_DIR = "/home/camerop/HYPSO_DATA_AERONET_TEST"
@@ -65,22 +65,27 @@ WRITE_DATACUBE = False
 #RAD_CAL_COEFFS_OPTIONS = ["moved", "original", "adjusted"]
 RAD_CAL_COEFFS_OPTIONS = ["moved"]
 
-LABEL = "moved_unmasked"
 
-TOGGLE_PROCESSING = False
+
+TOGGLE_PROCESSING = True
+
 APPLY_MASKS = False
+if APPLY_MASKS:
+    LABEL = "moved"
+else:
+    LABEL = "moved_unmasked"
 
 AERONET_OC_PRECHECK = False
 
 TOGGLE_OCSMART = False
-TOGGLE_ACOLITE = False
+TOGGLE_ACOLITE = True
 TOGGLE_6SV1 = False
 TOGGLE_SREM = False
 TOGGLE_POLYMER = False
-TOGGLE_DARK_PIXEL_SUBTRACTION = True
+TOGGLE_DARK_PIXEL_SUBTRACTION = False
 
-TOGGLE_RUN_AC = False
-TOGGLE_READ_AC = False
+TOGGLE_RUN_AC = True
+TOGGLE_READ_AC = True
 
 
 POLYMER_INPUT_PRODUCT_LEVEL = "l1c" 
@@ -180,6 +185,9 @@ def main(l1a_nc_path, l1b_nc_path, lats_path=None, lons_path=None, coeff_type=No
                     satobj.generate_l1b_cube(coeff_type=coeff_type)
                     #satobj.generate_l1c_cube()
                     satobj.generate_l1d_cube(use_direct_georef=True, generate_figures=GENERATE_FIGURES)
+
+                    satobj.latitudes = satobj.latitudes_direct
+                    satobj.longitudes = satobj.longitudes_direct
 
             else:
                 satobj.run_direct_georeferencing()

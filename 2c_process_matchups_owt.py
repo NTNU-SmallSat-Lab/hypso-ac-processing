@@ -21,6 +21,7 @@ sys.path.insert(0, '/home/camerop/AC/hypso-package/hypso2_calibration')
 
 
 
+
 from hypso import Hypso
 from hypso.write import write_l1b_nc_file, write_l1c_nc_file, write_l1d_nc_file, write_l2a_nc_file, write_products_nc_file
 from hypso.classification import decode_jon_cnn_labels, decode_jon_cnn_cloud_mask, decode_jon_cnn_water_mask, decode_jon_cnn_land_mask
@@ -43,6 +44,13 @@ from hypso.aeronet_oc import aeronet_oc_detect_matchups, \
 
 from hypso.write import write_aeronet_oc_matchup_nc_file
 
+
+#sys.path.insert(0, '/home/camerop/AC/pyOWT/pyowt')
+#from pyowt.OWT import OWT
+#from pyowt.OpticalVariables import OpticalVariables
+
+
+
 import earthaccess
 
 import logging
@@ -63,6 +71,7 @@ HYPSO_DATA_DIR = "/home/camerop/HYPSO_DATA_AOC"
 
 OUTPUT_BASE_DIR = Path("/home/camerop/Output/")
 
+PYOWT_PATH = "/home/camerop/AC/pyOWT/"
 
 GENERATE_FIGURES = False
 WRITE_DATACUBE = False
@@ -87,8 +96,8 @@ EARTHDATA_p = "Dec1!onJG0@1LogoMen5un!"
 
 
 
-if False:
-    ATMOSPHERIC_CORRECTION_ALGS=["dps"]
+if True:
+    ATMOSPHERIC_CORRECTION_ALGS=["dps", "l1d"]
     LABEL = "moved_unmasked"
 else:
     ATMOSPHERIC_CORRECTION_ALGS=["polymer", "acolite_l2w"]
@@ -126,14 +135,23 @@ def find_matching_files(aeronet_oc_data_dir, label=None, product_level="l2a", at
 
         for ac_alg in atmospheric_correction_algorithms:
 
+
             dir_path = os.path.join(aeronet_oc_data_dir, item)
+
+
+            # Pattern for the file: dirname + "-moved-l2a-polymer.nc"
+            # The dirname format example: "aeronetvenice_2025-05-14T10-45-06Z"
+            if ac_alg == "l1d":
+                pattern = os.path.join(dir_path, f"{item}-{label}-l1d.nc")
+            else:
+                pattern = os.path.join(dir_path, f"{item}-{label}-{product_level}-{ac_alg}.nc")
+
+            
             
             # Check if it's a directory
             if os.path.isdir(dir_path):
-                # Pattern for the file: dirname + "-moved-l2a-polymer.nc"
-                # The dirname format example: "aeronetvenice_2025-05-14T10-45-06Z"
-                pattern = os.path.join(dir_path, f"{item}-{label}-{product_level}-{ac_alg}.nc")
                 
+
                 # Search for matching files
                 matching_files_list = glob.glob(pattern)
 
@@ -143,6 +161,12 @@ def find_matching_files(aeronet_oc_data_dir, label=None, product_level="l2a", at
             except:
                 logging.info(f"> No matching file found for '{item}' generated using {ac_alg}")
                 
+            #try:
+            #    matched_files_in_dir["l1d"] = matching_l1d_files_list[0]
+            #    logging.info(f"> Associated L1d file found for '{item}' generated using {ac_alg}")
+            #except:
+            #    logging.info(f"> No associated L1d file found for '{item}' generated using {ac_alg}")
+
 
         if len(matched_files_in_dir) > 0:
 
@@ -237,7 +261,7 @@ def main(coeff_type=None):
                 #                start_date="2024-06-01", end_date="2024-07-31",
                 #                data_level=15)
 
-                aoc_cb, aoc_wavelengths = process_aeronet(**aoc_query)   
+                aoc_cb, aoc_wavelengths = process_aeronet(**aoc_query, pyowt_path=PYOWT_PATH)   
 
                 aoc_full_wavelengths = list(set(aoc_full_wavelengths) | set(aoc_wavelengths))
 
@@ -261,14 +285,28 @@ def main(coeff_type=None):
 
                     logging.info(f"Loading data from {aca} {capture_file}")
 
+
+                    if aca == "dps" or aca == "polymer":
+                        divide_by_pi = True
+                    else:
+                        divide_by_pi = False
+
                     try:
-                        satobj = Hypso(path=capture_file, verbose=True)
+                        satobj = Hypso(path=capture_file, verbose=True, label=LABEL)
 
                         # Regular HYPSO L2a
-                        hypso_cb = process_hypso(satobj, aoc_lat, aoc_lon, atmospheric_correction=aca)
+                        hypso_cb = process_hypso(satobj, aoc_lat, aoc_lon, atmospheric_correction=aca, divide_by_pi=divide_by_pi, pyowt_path=PYOWT_PATH)
 
                         # Convolve HYPSO with AERONET-OC SRFs (assumed to be Gaussian, 10nm FWHM)
-                        hypso_convolved_cb = process_hypso_convolved(satobj, aoc_wavelengths, aoc_lat, aoc_lon, atmospheric_correction=aca, aeronet_fwhm=10.0)
+                        hypso_convolved_cb = process_hypso_convolved(satobj, aoc_wavelengths, aoc_lat, aoc_lon, atmospheric_correction=aca, divide_by_pi=divide_by_pi, aeronet_fwhm=10.0, pyowt_path=PYOWT_PATH)
+
+
+                        # Add L1D TOA reflectance
+                        #l1d_nc_file = Path(satobj.capture_dir, satobj.l1d_nc_file)
+                        #satobj = Hypso(path=l1d_nc_file, verbose=True)
+                        #hypso_rhot_cb = process_hypso(satobj, aoc_lat, aoc_lon, atmospheric_correction="l1d", pyowt_path=PYOWT_PATH)
+                        # Convolve HYPSO with AERONET-OC SRFs (assumed to be Gaussian, 10nm FWHM)
+                        #hypso_rhot_convolved_cb = process_hypso_convolved(satobj, aoc_wavelengths, aoc_lat, aoc_lon, atmospheric_correction="l1d", aeronet_fwhm=10.0, pyowt_path=PYOWT_PATH)
 
                         hypso_cb_dict[aca] = hypso_cb
                         hypso_cb_dict[aca + "_convolved"] = hypso_convolved_cb
