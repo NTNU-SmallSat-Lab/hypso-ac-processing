@@ -37,7 +37,7 @@ from hypso.aeronet_oc import aeronet_oc_detect_matchups, \
                             process_hypso, \
                             match_hypso_data, \
                             get_column_prods, \
-                            process_satellite, \
+                            process_satellite_ac, \
                             match_data, \
                             match_all_data, \
                             process_hypso_convolved
@@ -93,6 +93,25 @@ AERONET_OC_SITES_CSV_PATH = "/home/camerop/AC/hypso-ac-processing/config/AERONET
 
 EARTHDATA_u = "cpenne"
 EARTHDATA_p = "Dec1!onJG0@1LogoMen5un!"
+
+# PACE atmospheric correction(s) to run per matchup granule, in addition to
+# the operational PACE L2 Rrs (which is always included): any of
+# "acolite_l2w", "dps", "polymer". All three are run so the matchup data
+# carries the operational Rrs, ACOLITE L2W Rrs, DPS reflectance, and Polymer
+# Rrs side by side.
+PACE_AC_METHOD = ["acolite_l2w", "dps", "polymer"]
+PACE_AC_METHOD = ["polymer"]
+PACE_AC_METHOD = ["acolite_l2w", "dps"]
+ACOLITE_PATH = "/home/camerop/AC/ACOLITE/acolite"
+
+# PACE-only Polymer install (see /home/camerop/AC/Polymer/polymer). Distinct
+# from POLYMER_PATH/EOREAD_PATH/etc. in 2b_process_capture.py, which target
+# the older Polymer_HYPSO_SRF_Oct_2025 fork used for HYPSO processing - that
+# one stays as-is and is not touched by this script.
+PACE_POLYMER_PATH = "/home/camerop/AC/Polymer/polymer"
+PACE_EOREAD_PATH = "/home/camerop/AC/Polymer/eoread"
+PACE_EOTOOLS_PATH = "/home/camerop/AC/Polymer/eotools"
+PACE_CORE_PATH = "/home/camerop/AC/Polymer/core"
 
 
 
@@ -237,6 +256,7 @@ def main(coeff_type=None):
             aoc_queries = build_aeronet_queries(satobj)
             #hypso_wavelengths = satobj.wavelengths
             search_date = satobj.capture_datetime.strftime('%Y-%m-%d')
+            hypso_capture_datetime = satobj.capture_datetime
             local_path = Path(satobj.capture_dir)
 
             del satobj
@@ -326,10 +346,19 @@ def main(coeff_type=None):
                 unique_days_str = [day.strftime('%Y-%m-%d') for day in unique_days]
                 
 
-                pace_cb = process_satellite(start_date=search_date, end_date=search_date,
+                pace_cb = process_satellite_ac(start_date=search_date, end_date=search_date,
                                 latitude=aoc_lat, longitude=aoc_lon, sat="PACE",
                                 selected_dates=unique_days_str,
-                                local_path=local_path)
+                                local_path=local_path,
+                                ac_method=PACE_AC_METHOD,
+                                nearest_to_datetime=hypso_capture_datetime,
+                                acolite_dir=ACOLITE_PATH,
+                                EARTHDATA_u=EARTHDATA_u,
+                                EARTHDATA_p=EARTHDATA_p,
+                                polymer_path=PACE_POLYMER_PATH,
+                                eoread_path=PACE_EOREAD_PATH,
+                                eotools_path=PACE_EOTOOLS_PATH,
+                                core_path=PACE_CORE_PATH)
 
                 for aca in ATMOSPHERIC_CORRECTION_ALGS:
 
